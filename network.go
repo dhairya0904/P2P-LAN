@@ -62,6 +62,12 @@ func (node *Node) Serve() {
 
 	if node.NodeType == "master" {
 		host.SetStreamHandler(protocol.ID(node.ProtocolID), node.handleStream)
+		initMDNS(host, node.RendezvousString)
+		for {
+			if host.Peerstore().Peers().Len() > 0 {
+				return
+			}
+		}
 	}
 
 	peerChan := initMDNS(host, node.RendezvousString)
@@ -147,5 +153,6 @@ func readJSON(rw *bufio.ReadWriter) interface{} {
 		}
 	}
 
+	fmt.Printf("lolol %+v", receivedData)
 	return receivedData
 }

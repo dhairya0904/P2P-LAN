@@ -50,15 +50,19 @@ func (node *Node) InitalizeNode() {
 
 	log.Debug().Msg(fmt.Sprintf("\n[*] Your Multiaddress Is: /ip4/%s/tcp/%v/p2p/%s\n", node.ListenHost, node.ListenPort, host.ID().Pretty()))
 
-	switch node.NodeType {
-
-	case "master":
+	if node.NodeType == "master" {
 		host.SetStreamHandler(protocol.ID(node.ProtocolID), handleStream)
-		initMDNS(host, node.RendezvousString)
-	default:
-		peerChan := initMDNS(host, node.RendezvousString)
+	}
+
+	peerChan := initMDNS(host, node.RendezvousString)
+
+	for {
 		peer := <-peerChan // will block until we discover a peer
 		log.Debug().Msg(fmt.Sprintf("Founde Peer %s", peer))
+
+		if node.NodeType == "master" {
+			continue
+		}
 
 		if err := host.Connect(ctx, peer); err != nil {
 			fmt.Println("Connection failed:", err)
@@ -78,10 +82,6 @@ func (node *Node) InitalizeNode() {
 			go readData(rw)
 			log.Debug().Msg(fmt.Sprintf("Connected to Peer %s", peer))
 		}
-
-	}
-
-	for {
 	}
 }
 

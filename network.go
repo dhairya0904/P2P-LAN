@@ -4,8 +4,9 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
-	"os"
+	"io"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -19,11 +20,20 @@ type Node struct {
 	ListenHost, RendezvousString, ProtocolID, NodeType string
 	ListenPort                                         int
 
-	// writeChannel chan interface{}
-	// readChannel  chan interface{}
+	writeChannel chan interface{}
+	readChannel  chan interface{}
 }
 
-func (node *Node) InitalizeNode() {
+func (node *Node) InitializeNode() {
+	node.readChannel = make(chan interface{})
+	node.writeChannel = make(chan interface{})
+}
+
+func (node *Node) GetNodeChannels() (chan interface{}, chan interface{}) {
+	return node.readChannel, node.writeChannel
+}
+
+func (node *Node) Serve() {
 
 	log.Debug().Msg(fmt.Sprintf("[*] Listening on: %s with port: %d\n", node.ListenHost, node.ListenPort))
 
@@ -51,7 +61,7 @@ func (node *Node) InitalizeNode() {
 	log.Debug().Msg(fmt.Sprintf("\n[*] Your Multiaddress Is: /ip4/%s/tcp/%v/p2p/%s\n", node.ListenHost, node.ListenPort, host.ID().Pretty()))
 
 	if node.NodeType == "master" {
-		host.SetStreamHandler(protocol.ID(node.ProtocolID), handleStream)
+		host.SetStreamHandler(protocol.ID(node.ProtocolID), node.handleStream)
 	}
 
 	peerChan := initMDNS(host, node.RendezvousString)
@@ -60,13 +70,13 @@ func (node *Node) InitalizeNode() {
 		peer := <-peerChan // will block until we discover a peer
 		log.Debug().Msg(fmt.Sprintf("Founde Peer %s", peer))
 
-		if node.NodeType == "master" {
-			continue
-		}
-
 		if err := host.Connect(ctx, peer); err != nil {
 			fmt.Println("Connection failed:", err)
 			panic(err)
+		}
+
+		if node.NodeType == "master" { //// no need to create stream from both the nodes
+			continue
 		}
 
 		// open a stream, this stream will be handled by handleStream other end
@@ -78,65 +88,68 @@ func (node *Node) InitalizeNode() {
 		} else {
 			rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 
-			go writeData(rw)
-			go readData(rw)
+			go writeData(rw, node.writeChannel)
+			go readData(rw, node.readChannel)
 			log.Debug().Msg(fmt.Sprintf("Connected to Peer %s", peer))
 		}
 	}
 }
 
-func handleStream(stream network.Stream) {
-	fmt.Println("Got a new stream!")
+func (node *Node) handleStream(stream network.Stream) {
+	log.Debug().Msg("Got a new stream!")
 
 	// Create a buffer stream for non-blocking read and write.
 	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 
-	go readData(rw)
-	go writeData(rw)
+	go readData(rw, node.readChannel)
+	go writeData(rw, node.writeChannel)
 
 	// 'stream' will stay open until you close it (or the other side closes it).
 }
 
-func readData(rw *bufio.ReadWriter) {
+func readData(rw *bufio.ReadWriter, readChannel chan<- interface{}) {
 	for {
-		str, err := rw.ReadString('\n')
-		if err != nil {
-			fmt.Println("Error reading from buffer")
-			panic(err)
-		}
-
-		if str == "" {
-			return
-		}
-		if str != "\n" {
-			// Green console colour: 	\x1b[32m
-			// Reset console colour: 	\x1b[0m
-			fmt.Printf("\x1b[32m%s\x1b[0m> ", str)
-		}
-
+		receivedData := readJSON(rw)
+		log.Debug().Msg(fmt.Sprintf("Received data %+v", receivedData))
+		readChannel <- receivedData
+		rw.Flush()
 	}
 }
 
-func writeData(rw *bufio.ReadWriter) {
-	stdReader := bufio.NewReader(os.Stdin)
+func writeData(rw *bufio.ReadWriter, writeChannel <-chan interface{}) {
 
 	for {
-		fmt.Print("> ")
-		sendData, err := stdReader.ReadString('\n')
+		data := <-writeChannel
+		dataBytes, err := json.Marshal(data)
+
 		if err != nil {
-			fmt.Println("Error reading from stdin")
 			panic(err)
 		}
 
-		_, err = rw.WriteString(fmt.Sprintf("%s\n", sendData))
+		_, err = rw.Write(dataBytes)
 		if err != nil {
-			fmt.Println("Error writing to buffer")
+			// fmt.Println("Error writing to buffer")
 			panic(err)
 		}
 		err = rw.Flush()
 		if err != nil {
-			fmt.Println("Error flushing buffer")
+			// fmt.Println("Error flushing buffer")
 			panic(err)
 		}
 	}
+}
+
+func readJSON(rw *bufio.ReadWriter) interface{} {
+
+	var receivedData interface{}
+
+	decoder := json.NewDecoder(rw.Reader)
+	err := decoder.Decode(&receivedData)
+	if err != nil {
+		if err != io.EOF {
+			panic(err)
+		}
+	}
+
+	return receivedData
 }

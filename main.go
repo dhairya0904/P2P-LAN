@@ -7,6 +7,10 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+type tmp struct {
+	hello string
+}
+
 func main() {
 
 	cfg := parseFlags()
@@ -25,5 +29,19 @@ func main() {
 		ProtocolID:       cfg.ProtocolID,
 		NodeType:         cfg.node,
 	}
-	node.InitalizeNode()
+	node.InitializeNode()
+	go node.Serve()
+
+	a := tmp{
+		hello: "fsadfsadfsfsd",
+	}
+	rc, rw := node.GetNodeChannels()
+	rw <- a
+	data := <-rc
+
+	user, _ := data.(tmp)
+	log.Debug().Msg(fmt.Sprintf("I got the data %+v", user))
+
+	for {
+	}
 }

@@ -66,19 +66,15 @@ func (node *Node) Serve() {
 
 	peerChan := initMDNS(host, node.RendezvousString)
 
-	for {
-		peer := <-peerChan // will block until we discover a peer
-		log.Debug().Msg(fmt.Sprintf("Founde Peer %s", peer))
+	peer := <-peerChan // will block until we discover a peer
+	log.Debug().Msg(fmt.Sprintf("Founde Peer %s", peer))
 
-		if err := host.Connect(ctx, peer); err != nil {
-			fmt.Println("Connection failed:", err)
-			panic(err)
-		}
+	if err := host.Connect(ctx, peer); err != nil {
+		fmt.Println("Connection failed:", err)
+		panic(err)
+	}
 
-		if node.NodeType == "master" { //// no need to create stream from both the nodes
-			continue
-		}
-
+	if node.NodeType == "peer" { //// no need to create stream from both the nodes
 		// open a stream, this stream will be handled by handleStream other end
 		stream, err := host.NewStream(ctx, peer.ID, protocol.ID(node.ProtocolID))
 

@@ -30,7 +30,7 @@ func main() {
 		NodeType:         cfg.node,
 	}
 	node.InitializeNode()
-	go node.Serve()
+	node.Serve()
 
 	a := tmp{
 		hello: "fsadfsadfsfsd",

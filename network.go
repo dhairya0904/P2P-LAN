@@ -10,6 +10,7 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
@@ -35,12 +36,20 @@ func (node *Node) GetNodeChannels() (chan interface{}, chan interface{}) {
 
 func (node *Node) Serve() {
 
+	host := node.createHost()
+
+	if node.NodeType == "master" {
+		node.startMaster(host)
+		return
+	}
+
+	node.startPeer(host)
+}
+
+func (node *Node) createHost() host.Host {
 	log.Debug().Msg(fmt.Sprintf("[*] Listening on: %s with port: %d\n", node.ListenHost, node.ListenPort))
 
-	ctx := context.Background()
 	r := rand.Reader
-
-	// Creates a new RSA key pair for this host.
 	prvKey, _, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, r)
 	if err != nil {
 		panic(err)
@@ -48,6 +57,7 @@ func (node *Node) Serve() {
 
 	sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%d", node.ListenHost, node.ListenPort))
 
+	// Creates a new RSA key pair for this host.
 	// libp2p.New constructs a new libp2p Host.
 	// Other options can be added here.
 	host, err := libp2p.New(
@@ -59,20 +69,15 @@ func (node *Node) Serve() {
 	}
 
 	log.Debug().Msg(fmt.Sprintf("\n[*] Your Multiaddress Is: /ip4/%s/tcp/%v/p2p/%s\n", node.ListenHost, node.ListenPort, host.ID().Pretty()))
+	return host
+}
 
-	if node.NodeType == "master" {
-		host.SetStreamHandler(protocol.ID(node.ProtocolID), node.handleStream)
-		initMDNS(host, node.RendezvousString)
-		for {
-			if host.Peerstore().Peers().Len() > 0 {
-				return
-			}
-		}
-	}
+func (node *Node) startPeer(host host.Host) {
 
+	ctx := context.Background()
 	peerChan := initMDNS(host, node.RendezvousString)
 
-	peer := <-peerChan // will block until we discover a peer
+	peer := <-peerChan
 	log.Debug().Msg(fmt.Sprintf("Founde Peer %s", peer))
 
 	if err := host.Connect(ctx, peer); err != nil {
@@ -80,19 +85,26 @@ func (node *Node) Serve() {
 		panic(err)
 	}
 
-	if node.NodeType == "peer" { //// no need to create stream from both the nodes
-		// open a stream, this stream will be handled by handleStream other end
-		stream, err := host.NewStream(ctx, peer.ID, protocol.ID(node.ProtocolID))
+	stream, err := host.NewStream(ctx, peer.ID, protocol.ID(node.ProtocolID))
 
-		if err != nil {
-			fmt.Println("Stream open failed", err)
-			panic(err)
-		} else {
-			rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+	if err != nil {
+		fmt.Println("Stream open failed", err)
+		panic(err)
+	} else {
+		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 
-			go writeData(rw, node.writeChannel)
-			go readData(rw, node.readChannel)
-			log.Debug().Msg(fmt.Sprintf("Connected to Peer %s", peer))
+		go writeData(rw, node.writeChannel)
+		go readData(rw, node.readChannel)
+		log.Debug().Msg(fmt.Sprintf("Connected to Peer %s", peer))
+	}
+}
+
+func (node *Node) startMaster(host host.Host) bool {
+	host.SetStreamHandler(protocol.ID(node.ProtocolID), node.handleStream)
+	initMDNS(host, node.RendezvousString)
+	for {
+		if host.Peerstore().Peers().Len() > 0 {
+			return true
 		}
 	}
 }
@@ -121,8 +133,10 @@ func readData(rw *bufio.ReadWriter, readChannel chan<- interface{}) {
 func writeData(rw *bufio.ReadWriter, writeChannel <-chan interface{}) {
 
 	for {
-		data := <-writeChannel
+		var data interface{} = <-writeChannel
+		log.Debug().Msg(fmt.Sprintf("%+v chacha", data))
 		dataBytes, err := json.Marshal(data)
+		log.Debug().Msg(string(dataBytes))
 
 		if err != nil {
 			panic(err)
@@ -153,6 +167,6 @@ func readJSON(rw *bufio.ReadWriter) interface{} {
 		}
 	}
 
-	fmt.Printf("lolol %+v", receivedData)
+	log.Debug().Msg(fmt.Sprintf("I can read %+v", receivedData))
 	return receivedData
 }

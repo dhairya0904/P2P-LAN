@@ -3,12 +3,13 @@ package main
 import (
 	"fmt"
 
+	mapstructure "github.com/mitchellh/mapstructure"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
-type tmp struct {
-	hello string
+type Tmp struct {
+	Hello string `json:"hello"`
 }
 
 func main() {
@@ -32,15 +33,22 @@ func main() {
 	node.InitializeNode()
 	node.Serve()
 
-	a := tmp{
-		hello: "fsadfsadfsfsd",
+	log.Debug().Msg("Connection initialized")
+
+	a := Tmp{
+		Hello: "I am being printed now",
 	}
 	rc, rw := node.GetNodeChannels()
 	rw <- a
 	data := <-rc
 
-	user, _ := data.(tmp)
-	log.Debug().Msg(fmt.Sprintf("I got the data %+v", user))
+	var result Tmp
+	err := mapstructure.Decode(data, &result)
+	if err != nil {
+		panic(err)
+	}
+
+	log.Debug().Msg(fmt.Sprintf("finally I got the data %+v", result))
 
 	for {
 	}

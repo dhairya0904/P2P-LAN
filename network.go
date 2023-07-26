@@ -100,12 +100,13 @@ func (node *Node) startPeer(host host.Host) {
 }
 
 func (node *Node) startMaster(host host.Host) bool {
+	log.Debug().Msg("Creating master node")
 	host.SetStreamHandler(protocol.ID(node.ProtocolID), node.handleStream)
 	initMDNS(host, node.RendezvousString)
 	for {
-		if host.Peerstore().Peers().Len() > 0 {
+		if len(host.Network().Peers()) > 0 {
 			log.Debug().Msg("Peer found and connected from master")
-			log.Debug().Msg(fmt.Sprintf("%d", host.Peerstore().Peers().Len()))
+			log.Debug().Msg(fmt.Sprintf("%d", len(host.Network().Peers())))
 			return true
 		}
 	}

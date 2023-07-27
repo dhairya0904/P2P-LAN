@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
-	mapstructure "github.com/mitchellh/mapstructure"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -31,25 +31,43 @@ func main() {
 		NodeType:         cfg.node,
 	}
 	node.InitializeNode()
-	node.Serve()
+	host := node.CreateHost()
 
-	log.Debug().Msg("Connection initialized")
+	peerChan := initMDNS(host, node.RendezvousString)
 
-	a := Tmp{
-		Hello: "I am being printed now",
-	}
-	rc, rw := node.GetNodeChannels()
-	rw <- a
-	data := <-rc
+	peer := <-peerChan
+	fmt.Println("Found peer", peer)
 
-	var result Tmp
-	err := mapstructure.Decode(data, &result)
-	if err != nil {
+	ctx := context.Background()
+
+	if err := host.Connect(ctx, peer); err != nil {
+		fmt.Println("Connection failed:", err)
 		panic(err)
 	}
 
-	log.Debug().Msg(fmt.Sprintf("finally I got the data %+v", result))
-
+	fmt.Println(len(host.Network().Peers()))
+	fmt.Println(host.Network().Peers())
 	for {
 	}
+	// 	node.Serve()
+
+	// 	log.Debug().Msg("Connection initialized")
+
+	// 	a := Tmp{
+	// 		Hello: "I am being printed now",
+	// 	}
+	// 	rc, rw := node.GetNodeChannels()
+	// 	rw <- a
+	// 	data := <-rc
+
+	// 	var result Tmp
+	// 	err := mapstructure.Decode(data, &result)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+
+	// 	log.Debug().Msg(fmt.Sprintf("finally I got the data %+v", result))
+
+	// for {
+	// }
 }

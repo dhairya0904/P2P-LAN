@@ -36,7 +36,7 @@ func (node *Node) GetNodeChannels() (chan interface{}, chan interface{}) {
 
 func (node *Node) Serve() {
 
-	host := node.createHost()
+	host := node.CreateHost()
 
 	if node.NodeType == "master" {
 		node.startMaster(host)
@@ -46,7 +46,7 @@ func (node *Node) Serve() {
 	node.startPeer(host)
 }
 
-func (node *Node) createHost() host.Host {
+func (node *Node) CreateHost() host.Host {
 	log.Debug().Msg(fmt.Sprintf("[*] Listening on: %s with port: %d\n", node.ListenHost, node.ListenPort))
 
 	r := rand.Reader
@@ -99,17 +99,24 @@ func (node *Node) startPeer(host host.Host) {
 	}
 }
 
-func (node *Node) startMaster(host host.Host) bool {
+func (node *Node) startMaster(host host.Host) {
+
+	// ctx := context.Background()
 	log.Debug().Msg("Creating master node")
 	host.SetStreamHandler(protocol.ID(node.ProtocolID), node.handleStream)
 	initMDNS(host, node.RendezvousString)
-	for {
-		if len(host.Network().Peers()) > 0 {
-			log.Debug().Msg("Peer found and connected from master")
-			log.Debug().Msg(fmt.Sprintf("%d", len(host.Network().Peers())))
-			return true
-		}
-	}
+	// peer := <-peerChan
+
+	// if err := host.Connect(ctx, peer); err != nil {
+	// 	panic(err)
+	// }
+	// for {
+	// 	if len(host.Network().Peers()) > 0 {
+	// 		log.Debug().Msg("Peer found and connected from master")
+	// 		log.Debug().Msg(fmt.Sprintf("%d", len(host.Network().Peers())))
+	// 		return true
+	// 	}
+	// }
 }
 
 func (node *Node) handleStream(stream network.Stream) {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -109,7 +110,9 @@ func (node *Node) startMaster(host host.Host) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("libp2p node address:", addrs[0], privateIp)
+
+	connectionString := strings.Replace(addrs[0].String(), "127.0.0.1", privateIp, 1)
+	fmt.Printf("Connect using this %s", connectionString)
 }
 
 func (node *Node) handleStream(stream network.Stream) {

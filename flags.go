@@ -23,7 +23,7 @@ func parseFlags() *config {
 	flag.StringVar(&c.logLevel, "logLevel", "info", "Sets lob level for debugging")
 	flag.StringVar(&c.node, "node", "peer", "Sets peer master")
 	flag.IntVar(&c.listenPort, "port", 4001, "node listen port")
-	flag.StringVar(&c.peerAddress, "peer", "_", "Sets peer address")
+	flag.StringVar(&c.peerAddress, "peer", "", "Sets peer address")
 
 	flag.Parse()
 	return c

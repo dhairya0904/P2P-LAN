@@ -104,7 +104,7 @@ func (node *Node) startMaster(host host.Host) {
 	// ctx := context.Background()
 	log.Debug().Msg("Creating master node")
 	host.SetStreamHandler(protocol.ID(node.ProtocolID), node.handleStream)
-	initMDNS(host, node.RendezvousString)
+	// initMDNS(host, node.RendezvousString)
 	// peer := <-peerChan
 
 	// if err := host.Connect(ctx, peer); err != nil {

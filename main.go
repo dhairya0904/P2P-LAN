@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 
+	peerstore "github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -32,42 +36,58 @@ func main() {
 	}
 	node.InitializeNode()
 	host := node.CreateHost()
+	node.InitializeNode()
 
-	peerChan := initMDNS(host, node.RendezvousString)
-
-	peer := <-peerChan
-	fmt.Println("Found peer", peer)
-
-	ctx := context.Background()
-
-	if err := host.Connect(ctx, peer); err != nil {
-		fmt.Println("Connection failed:", err)
-		panic(err)
+	if len(cfg.peerAddress) < 2 {
+		node.startMaster(host)
 	}
 
-	fmt.Println(len(host.Network().Peers()))
-	fmt.Println(host.Network().Peers())
+	// print the node's PeerInfo in multiaddr format
+	peerInfo := peerstore.AddrInfo{
+		ID:    host.ID(),
+		Addrs: host.Addrs(),
+	}
+	addrs, _ := peerstore.AddrInfoToP2pAddrs(&peerInfo)
+	fmt.Println("libp2p node address:", addrs[0])
+
+	if len(cfg.peerAddress) > 2 {
+		addr, err := multiaddr.NewMultiaddr(cfg.peerAddress)
+
+		if err != nil {
+			panic(err)
+		}
+
+		peer, err := peerstore.AddrInfoFromP2pAddr(addr)
+		if err != nil {
+			panic(err)
+		}
+
+		if err := host.Connect(context.Background(), *peer); err != nil {
+			fmt.Println("Connection failed:", err)
+			panic(err)
+		}
+
+		stream, err := host.NewStream(context.Background(), peer.ID, protocol.ID(node.ProtocolID))
+
+		if err != nil {
+			fmt.Println("Stream open failed", err)
+			panic(err)
+		} else {
+			rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+
+			go writeData(rw, node.writeChannel)
+			go readData(rw, node.readChannel)
+			log.Debug().Msg(fmt.Sprintf("Connected to Peer %s", peer))
+		}
+	}
+
+	a := Tmp{
+		Hello: "fsd",
+	}
+	rc, wc := node.GetNodeChannels()
+	wc <- a
+	fmt.Println(<-rc)
+
 	for {
 	}
-	// 	node.Serve()
-
-	// 	log.Debug().Msg("Connection initialized")
-
-	// 	a := Tmp{
-	// 		Hello: "I am being printed now",
-	// 	}
-	// 	rc, rw := node.GetNodeChannels()
-	// 	rw <- a
-	// 	data := <-rc
-
-	// 	var result Tmp
-	// 	err := mapstructure.Decode(data, &result)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-
-	// 	log.Debug().Msg(fmt.Sprintf("finally I got the data %+v", result))
-
-	// for {
-	// }
 }

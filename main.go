@@ -1,13 +1,8 @@
 package main
 
 import (
-	"bufio"
-	"context"
 	"fmt"
 
-	peerstore "github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/protocol"
-	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -38,47 +33,10 @@ func main() {
 	host := node.CreateHost()
 	node.InitializeNode()
 
-	if len(cfg.peerAddress) < 2 {
+	if len(cfg.peerAddress) == 0 {
 		node.startMaster(host)
-	}
-
-	// print the node's PeerInfo in multiaddr format
-	peerInfo := peerstore.AddrInfo{
-		ID:    host.ID(),
-		Addrs: host.Addrs(),
-	}
-	addrs, _ := peerstore.AddrInfoToP2pAddrs(&peerInfo)
-	fmt.Println("libp2p node address:", addrs[0])
-
-	if len(cfg.peerAddress) > 2 {
-		addr, err := multiaddr.NewMultiaddr(cfg.peerAddress)
-
-		if err != nil {
-			panic(err)
-		}
-
-		peer, err := peerstore.AddrInfoFromP2pAddr(addr)
-		if err != nil {
-			panic(err)
-		}
-
-		if err := host.Connect(context.Background(), *peer); err != nil {
-			fmt.Println("Connection failed:", err)
-			panic(err)
-		}
-
-		stream, err := host.NewStream(context.Background(), peer.ID, protocol.ID(node.ProtocolID))
-
-		if err != nil {
-			fmt.Println("Stream open failed", err)
-			panic(err)
-		} else {
-			rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-
-			go writeData(rw, node.writeChannel)
-			go readData(rw, node.readChannel)
-			log.Debug().Msg(fmt.Sprintf("Connected to Peer %s", peer))
-		}
+	} else {
+		node.connectWithPeer(host, cfg.peerAddress)
 	}
 
 	a := Tmp{

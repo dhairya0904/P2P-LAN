@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
+	peerstore "github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/zerolog/log"
@@ -32,18 +34,6 @@ func (node *Node) InitializeNode() {
 
 func (node *Node) GetNodeChannels() (chan interface{}, chan interface{}) {
 	return node.readChannel, node.writeChannel
-}
-
-func (node *Node) Serve() {
-
-	host := node.CreateHost()
-
-	if node.NodeType == "master" {
-		node.startMaster(host)
-		return
-	}
-
-	node.startPeer(host)
 }
 
 func (node *Node) CreateHost() host.Host {
@@ -72,15 +62,21 @@ func (node *Node) CreateHost() host.Host {
 	return host
 }
 
-func (node *Node) startPeer(host host.Host) {
+func (node *Node) connectWithPeer(host host.Host, peerAddress string) {
 
 	ctx := context.Background()
-	peerChan := initMDNS(host, node.RendezvousString)
+	addr, err := multiaddr.NewMultiaddr(peerAddress)
 
-	peer := <-peerChan
-	log.Debug().Msg(fmt.Sprintf("Founde Peer %s", peer))
+	if err != nil {
+		panic(err)
+	}
 
-	if err := host.Connect(ctx, peer); err != nil {
+	peer, err := peerstore.AddrInfoFromP2pAddr(addr)
+	if err != nil {
+		panic(err)
+	}
+
+	if err := host.Connect(context.Background(), *peer); err != nil {
 		fmt.Println("Connection failed:", err)
 		panic(err)
 	}
@@ -100,23 +96,20 @@ func (node *Node) startPeer(host host.Host) {
 }
 
 func (node *Node) startMaster(host host.Host) {
-
-	// ctx := context.Background()
 	log.Debug().Msg("Creating master node")
 	host.SetStreamHandler(protocol.ID(node.ProtocolID), node.handleStream)
-	// initMDNS(host, node.RendezvousString)
-	// peer := <-peerChan
 
-	// if err := host.Connect(ctx, peer); err != nil {
-	// 	panic(err)
-	// }
-	// for {
-	// 	if len(host.Network().Peers()) > 0 {
-	// 		log.Debug().Msg("Peer found and connected from master")
-	// 		log.Debug().Msg(fmt.Sprintf("%d", len(host.Network().Peers())))
-	// 		return true
-	// 	}
-	// }
+	peerInfo := peerstore.AddrInfo{
+		ID:    host.ID(),
+		Addrs: host.Addrs(),
+	}
+	addrs, _ := peerstore.AddrInfoToP2pAddrs(&peerInfo)
+	privateIp, err := getPrivateIP()
+
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("libp2p node address:", addrs[0], privateIp)
 }
 
 func (node *Node) handleStream(stream network.Stream) {
@@ -179,4 +172,57 @@ func readJSON(rw *bufio.ReadWriter) interface{} {
 
 	log.Debug().Msg(fmt.Sprintf("I can read %+v", receivedData))
 	return receivedData
+}
+
+func getPrivateIP() (string, error) {
+	// Get all network interfaces
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return "", err
+	}
+
+	// Iterate through the network interfaces
+	for _, iface := range interfaces {
+		// Ignore loopback and non-up interfaces
+		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+
+		// Get all addresses for the current interface
+		addrs, err := iface.Addrs()
+		if err != nil {
+			return "", err
+		}
+
+		// Iterate through the addresses of the current interface
+		for _, addr := range addrs {
+			// Check if the address is an IP address
+			if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+				// Check if the IP address is a private IP
+				if ipnet.IP.To4() != nil && isPrivateIP(ipnet.IP) {
+					return ipnet.IP.String(), nil
+				}
+			}
+		}
+	}
+
+	return "", fmt.Errorf("private IP not found")
+}
+
+func isPrivateIP(ip net.IP) bool {
+	// Check if the IP address belongs to private IP address ranges
+	privateCIDRs := []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+	}
+
+	for _, cidr := range privateCIDRs {
+		_, ipnet, err := net.ParseCIDR(cidr)
+		if err == nil && ipnet.Contains(ip) {
+			return true
+		}
+	}
+
+	return false
 }

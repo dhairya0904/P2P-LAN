@@ -1,13 +1,8 @@
 package main
 
 import (
-	"bufio"
-	"context"
 	"fmt"
 
-	peerstore "github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/protocol"
-	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -36,57 +31,65 @@ func main() {
 	}
 	node.InitializeNode()
 	host := node.CreateHost()
-	node.InitializeNode()
 
-	if len(cfg.peerAddress) < 2 {
-		node.startMaster(host)
+	peerChan := initMDNS(host, cfg.RendezvousString)
+
+	for {
+		peer := <-peerChan
+		fmt.Println(peer)
 	}
 
-	// print the node's PeerInfo in multiaddr format
-	peerInfo := peerstore.AddrInfo{
-		ID:    host.ID(),
-		Addrs: host.Addrs(),
-	}
-	addrs, _ := peerstore.AddrInfoToP2pAddrs(&peerInfo)
-	fmt.Println("libp2p node address:", addrs[0])
+	// node.InitializeNode()
 
-	if len(cfg.peerAddress) > 2 {
-		addr, err := multiaddr.NewMultiaddr(cfg.peerAddress)
+	// if len(cfg.peerAddress) < 2 {
+	// 	node.startMaster(host)
+	// }
 
-		if err != nil {
-			panic(err)
-		}
+	// // print the node's PeerInfo in multiaddr format
+	// peerInfo := peerstore.AddrInfo{
+	// 	ID:    host.ID(),
+	// 	Addrs: host.Addrs(),
+	// }
+	// addrs, _ := peerstore.AddrInfoToP2pAddrs(&peerInfo)
+	// fmt.Println("libp2p node address:", addrs[0])
 
-		peer, err := peerstore.AddrInfoFromP2pAddr(addr)
-		if err != nil {
-			panic(err)
-		}
+	// if len(cfg.peerAddress) > 2 {
+	// 	addr, err := multiaddr.NewMultiaddr(cfg.peerAddress)
 
-		if err := host.Connect(context.Background(), *peer); err != nil {
-			fmt.Println("Connection failed:", err)
-			panic(err)
-		}
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
 
-		stream, err := host.NewStream(context.Background(), peer.ID, protocol.ID(node.ProtocolID))
+	// 	peer, err := peerstore.AddrInfoFromP2pAddr(addr)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
 
-		if err != nil {
-			fmt.Println("Stream open failed", err)
-			panic(err)
-		} else {
-			rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+	// 	if err := host.Connect(context.Background(), *peer); err != nil {
+	// 		fmt.Println("Connection failed:", err)
+	// 		panic(err)
+	// 	}
 
-			go writeData(rw, node.writeChannel)
-			go readData(rw, node.readChannel)
-			log.Debug().Msg(fmt.Sprintf("Connected to Peer %s", peer))
-		}
-	}
+	// 	stream, err := host.NewStream(context.Background(), peer.ID, protocol.ID(node.ProtocolID))
 
-	a := Tmp{
-		Hello: "fsd",
-	}
-	rc, wc := node.GetNodeChannels()
-	wc <- a
-	fmt.Println(<-rc)
+	// 	if err != nil {
+	// 		fmt.Println("Stream open failed", err)
+	// 		panic(err)
+	// 	} else {
+	// 		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+
+	// 		go writeData(rw, node.writeChannel)
+	// 		go readData(rw, node.readChannel)
+	// 		log.Debug().Msg(fmt.Sprintf("Connected to Peer %s", peer))
+	// 	}
+	// }
+
+	// a := Tmp{
+	// 	Hello: "fsd",
+	// }
+	// rc, wc := node.GetNodeChannels()
+	// wc <- a
+	// fmt.Println(<-rc)
 
 	for {
 	}
